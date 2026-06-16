@@ -93,8 +93,10 @@ class IslandOverlayService : LifecycleService() {
         if (PermissionUtils.canDrawOverlays(this)) {
             addOverlayIfNeeded()
             IslandController.setEnabled(true)
+            isRunning = true
             lifecycleScope.launch { settings.setWasRunning(true) }
-            // Start mirroring real media if notification access is granted.
+            // (Re)attach the real feature monitors with whatever permissions are now granted.
+            // Both calls are idempotent, so refreshing after a permission grant is safe.
             if (PermissionUtils.isNotificationListenerEnabled(this)) {
                 nowPlaying.start()
             }
@@ -146,6 +148,7 @@ class IslandOverlayService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         nowPlaying.stop()
         callMonitor.stop()
         IslandController.setEnabled(false)
@@ -202,6 +205,11 @@ class IslandOverlayService : LifecycleService() {
         private const val CHANNEL_ID = "island_overlay"
         private const val NOTIFICATION_ID = 1001
         const val ACTION_STOP = "com.dynamicisland.app.STOP"
+
+        /** True while the overlay service is live; used to refresh monitors after a permission grant. */
+        @Volatile
+        var isRunning: Boolean = false
+            private set
 
         fun start(context: Context) {
             val intent = Intent(context, IslandOverlayService::class.java)

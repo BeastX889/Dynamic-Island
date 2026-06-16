@@ -73,7 +73,14 @@ private fun HomeScreen(modifier: Modifier = Modifier) {
 
     // Re-read permission state whenever the screen resumes (user may have toggled it in Settings).
     var refreshKey by remember { mutableStateOf(0) }
-    LifecycleResumeEffect { refreshKey++ }
+    LifecycleResumeEffect {
+        refreshKey++
+        // If the island is already running, re-poke the service so a permission the user just
+        // granted (notification access / phone) is picked up without a manual stop/start.
+        if (IslandOverlayService.isRunning && PermissionUtils.canDrawOverlays(context)) {
+            IslandOverlayService.start(context)
+        }
+    }
 
     val overlayGranted = remember(refreshKey) { PermissionUtils.canDrawOverlays(context) }
     val listenerEnabled = remember(refreshKey) { PermissionUtils.isNotificationListenerEnabled(context) }

@@ -35,6 +35,7 @@ class NowPlayingRepository(private val context: Context) {
     private val handler = Handler(Looper.getMainLooper())
 
     private var activeController: MediaController? = null
+    private var started = false
 
     private val sessionsListener =
         MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
@@ -55,11 +56,13 @@ class NowPlayingRepository(private val context: Context) {
     }
 
     fun start() {
+        if (started) return
         try {
             sessionManager.addOnActiveSessionsChangedListener(sessionsListener, listenerComponent, handler)
             bindTopController(sessionManager.getActiveSessions(listenerComponent))
+            started = true
         } catch (_: SecurityException) {
-            // Notification listener not enabled — leave the media slot empty.
+            // Notification listener not enabled yet — stay un-started so a later refresh retries.
         }
     }
 
@@ -67,6 +70,7 @@ class NowPlayingRepository(private val context: Context) {
         runCatching { sessionManager.removeOnActiveSessionsChangedListener(sessionsListener) }
         handler.removeCallbacks(ticker)
         detach()
+        started = false
         IslandController.submit(IslandController.Source.MEDIA, null)
     }
 

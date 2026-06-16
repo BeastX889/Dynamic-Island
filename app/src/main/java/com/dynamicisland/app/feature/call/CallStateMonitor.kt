@@ -29,13 +29,16 @@ class CallStateMonitor(private val context: Context) {
 
     private var modernCallback: TelephonyCallback? = null
     private var legacyListener: PhoneStateListener? = null
+    private var started = false
 
     fun start() {
+        if (started) return
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE)
             != PackageManager.PERMISSION_GRANTED
         ) {
             return
         }
+        started = true
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val callback = object : TelephonyCallback(), TelephonyCallback.CallStateListener {
@@ -65,6 +68,7 @@ class CallStateMonitor(private val context: Context) {
             legacyListener?.let { telephony.listen(it, PhoneStateListener.LISTEN_NONE) }
             legacyListener = null
         }
+        started = false
         IslandController.submit(IslandController.Source.CALL, null)
     }
 
