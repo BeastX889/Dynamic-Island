@@ -1,0 +1,24 @@
+<resources>
+    <string name="app_name">Dynamic Island</string>
+
+    <!-- Foreground service notification -->
+    <string name="fgs_channel_name">Dynamic Island</string>
+    <string name="fgs_channel_desc">Keeps the floating island visible.</string>
+    <string name="fgs_notification_title">Dynamic Island is active</string>
+    <string name="fgs_notification_text">Tap to open settings.</string>
+
+    <!-- Onboarding / permissions -->
+    <string name="perm_overlay_title">Draw over other apps</string>
+    <string name="perm_overlay_desc">Lets the island float on top of any screen.</string>
+    <string name="perm_notif_listener_title">Notification access</string>
+    <string name="perm_notif_listener_desc">Reads now-playing media and notifications to show them on the island.</string>
+    <string name="perm_post_notif_title">Show notifications</string>
+    <string name="perm_post_notif_desc">Required for the always-on service notification (Android 13+).</string>
+    <string name="perm_phone_title">Phone state</string>
+    <string name="perm_phone_desc">Shows incoming and ongoing calls on the island.</string>
+
+    <string name="action_grant">Grant</string>
+    <string name="action_granted">Granted</string>
+    <string name="action_start">Start island</string>
+    <string name="action_stop">Stop island</string>
+</resources>
