@@ -24,11 +24,15 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -38,12 +42,16 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.DisposableEffect
+import com.dynamicisland.app.data.IslandSettings
+import com.dynamicisland.app.data.SettingsRepository
+import com.dynamicisland.app.feature.timer.IslandTimer
 import com.dynamicisland.app.island.CallPhase
 import com.dynamicisland.app.island.IslandController
 import com.dynamicisland.app.island.IslandState
 import com.dynamicisland.app.service.IslandOverlayService
 import com.dynamicisland.app.ui.theme.DynamicIslandTheme
 import com.dynamicisland.app.util.PermissionUtils
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -132,6 +140,79 @@ private fun HomeScreen(modifier: Modifier = Modifier) {
         Text("Demo states", fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         DemoButtons()
+
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(16.dp))
+        Text("Timer", fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        TimerControls()
+
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(16.dp))
+        Text("Settings", fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        SettingsSection()
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TimerControls() {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { IslandTimer.start("Timer", 60_000) }) { Text("Start 1 min") }
+        OutlinedButton(onClick = { IslandTimer.start("Timer", 10_000) }) { Text("Start 10 s") }
+        OutlinedButton(onClick = { IslandTimer.cancel() }) { Text("Cancel") }
+    }
+}
+
+@Composable
+private fun SettingsSection() {
+    val context = LocalContext.current
+    val repo = remember { SettingsRepository(context) }
+    val scope = rememberCoroutineScope()
+    val settings by repo.flow.collectAsState(initial = IslandSettings())
+
+    LabeledSlider("Vertical position", settings.verticalOffsetDp.toFloat(), 0f..120f) { v ->
+        scope.launch { repo.setVerticalOffset(v.toInt()) }
+    }
+    LabeledSlider("Horizontal position", settings.horizontalOffsetDp.toFloat(), -80f..80f) { v ->
+        scope.launch { repo.setHorizontalOffset(v.toInt()) }
+    }
+    LabeledSlider("Size (%)", settings.scalePercent.toFloat(), 70f..130f) { v ->
+        scope.launch { repo.setScalePercent(v.toInt()) }
+    }
+    FeatureSwitch("Now playing", settings.mediaEnabled) { scope.launch { repo.setMediaEnabled(it) } }
+    FeatureSwitch("Calls", settings.callEnabled) { scope.launch { repo.setCallEnabled(it) } }
+    FeatureSwitch("Timers", settings.timerEnabled) { scope.launch { repo.setTimerEnabled(it) } }
+    FeatureSwitch("Live activities", settings.liveActivityEnabled) {
+        scope.launch { repo.setLiveActivityEnabled(it) }
+    }
+}
+
+@Composable
+private fun LabeledSlider(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onChange: (Float) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text("$label: ${value.toInt()}", style = MaterialTheme.typography.bodySmall)
+        Slider(value = value, onValueChange = onChange, valueRange = range)
+    }
+}
+
+@Composable
+private fun FeatureSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label)
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 

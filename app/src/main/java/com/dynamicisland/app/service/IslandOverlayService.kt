@@ -14,14 +14,21 @@ import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.lifecycle.LifecycleService
+import androidx.lifecycle.lifecycleScope
 import com.dynamicisland.app.MainActivity
 import com.dynamicisland.app.R
+import com.dynamicisland.app.data.SettingsRepository
+import com.dynamicisland.app.feature.FeatureFlags
+import com.dynamicisland.app.feature.call.CallStateMonitor
 import com.dynamicisland.app.feature.media.NowPlayingRepository
 import com.dynamicisland.app.island.IslandController
 import com.dynamicisland.app.overlay.ComposeOverlayHost
 import com.dynamicisland.app.overlay.IslandView
 import com.dynamicisland.app.util.PermissionUtils
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * Foreground service that owns the floating island window.
@@ -34,18 +41,48 @@ class IslandOverlayService : LifecycleService() {
 
     private lateinit var windowManager: WindowManager
     private var host: ComposeOverlayHost? = null
+    private var params: WindowManager.LayoutParams? = null
     private lateinit var nowPlaying: NowPlayingRepository
+    private lateinit var callMonitor: CallStateMonitor
+    private lateinit var settings: SettingsRepository
+    private val scaleState = mutableFloatStateOf(1f)
 
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         nowPlaying = NowPlayingRepository(this)
+        callMonitor = CallStateMonitor(this)
+        settings = SettingsRepository(this)
+        observeSettings()
+    }
+
+    /** Mirror persisted settings into feature flags, the pill scale, and the window position. */
+    private fun observeSettings() {
+        lifecycleScope.launch {
+            settings.flow.collect { s ->
+                FeatureFlags.media = s.mediaEnabled
+                FeatureFlags.call = s.callEnabled
+                FeatureFlags.timer = s.timerEnabled
+                FeatureFlags.liveActivity = s.liveActivityEnabled
+                scaleState.floatValue = s.scalePercent / 100f
+                applyLayout(s.verticalOffsetDp, s.horizontalOffsetDp)
+            }
+        }
+    }
+
+    private fun applyLayout(verticalOffsetDp: Int, horizontalOffsetDp: Int) {
+        val density = resources.displayMetrics.density
+        val p = params ?: return
+        p.x = (horizontalOffsetDp * density).toInt()
+        p.y = (verticalOffsetDp * density).toInt()
+        host?.let { runCatching { windowManager.updateViewLayout(it.composeView, p) } }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
 
         if (intent?.action == ACTION_STOP) {
+            runBlocking { settings.setWasRunning(false) }
             stopSelf()
             return START_NOT_STICKY
         }
@@ -56,10 +93,12 @@ class IslandOverlayService : LifecycleService() {
         if (PermissionUtils.canDrawOverlays(this)) {
             addOverlayIfNeeded()
             IslandController.setEnabled(true)
+            lifecycleScope.launch { settings.setWasRunning(true) }
             // Start mirroring real media if notification access is granted.
             if (PermissionUtils.isNotificationListenerEnabled(this)) {
                 nowPlaying.start()
             }
+            callMonitor.start()
         }
         return START_STICKY
     }
@@ -74,11 +113,12 @@ class IslandOverlayService : LifecycleService() {
                 onTap = { IslandController.toggleExpanded() },
                 onLongPress = { IslandController.setExpanded(true) },
                 onMusicAction = { nowPlaying.onAction(it) },
+                scale = scaleState.floatValue,
             )
         }
         host = overlayHost
 
-        val params = WindowManager.LayoutParams(
+        val layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -88,12 +128,12 @@ class IslandOverlayService : LifecycleService() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            // Sits flush with the top so the pill wraps the camera cutout.
-            // Fine-grained calibration arrives with the settings screen (Phase 5).
+            // Position is refined by the settings (vertical/horizontal calibration) via applyLayout.
             y = 0
         }
+        params = layoutParams
 
-        windowManager.addView(overlayHost.composeView, params)
+        windowManager.addView(overlayHost.composeView, layoutParams)
         overlayHost.onAttached()
     }
 
@@ -107,6 +147,7 @@ class IslandOverlayService : LifecycleService() {
 
     override fun onDestroy() {
         nowPlaying.stop()
+        callMonitor.stop()
         IslandController.setEnabled(false)
         removeOverlay()
         super.onDestroy()

@@ -79,6 +79,7 @@ fun IslandView(
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     onMusicAction: (MusicAction) -> Unit = {},
+    scale: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
     val geo = geometryFor(state.presentation)
@@ -87,9 +88,9 @@ fun IslandView(
         dampingRatio = Spring.DampingRatioMediumBouncy,
         stiffness = Spring.StiffnessMediumLow,
     )
-    val width by animateDpAsState(geo.width, springSpec, label = "width")
-    val height by animateDpAsState(geo.height, springSpec, label = "height")
-    val corner by animateDpAsState(geo.corner, springSpec, label = "corner")
+    val width by animateDpAsState(geo.width * scale, springSpec, label = "width")
+    val height by animateDpAsState(geo.height * scale, springSpec, label = "height")
+    val corner by animateDpAsState(geo.corner * scale, springSpec, label = "corner")
 
     if (state is IslandState.Hidden) return
 

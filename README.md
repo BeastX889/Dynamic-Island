@@ -3,10 +3,11 @@
 An Android recreation of the iPhone **Dynamic Island** — a floating, morphing pill anchored to the
 phone's camera cutout that reacts to system events (now playing, calls, timers, live activities).
 
-> Status: **Phase 0–2** — project scaffold, permission onboarding, foreground overlay service, the
-> core morphing-pill animation with demo triggers, and **real Now Playing** (live media metadata +
-> working transport controls via `MediaSessionManager`). Call/timer wiring and live activities land
-> in later phases (see the roadmap below).
+> Status: **Phase 0–5 — feature-complete for v1.** Morphing overlay pill, permission onboarding,
+> real Now Playing (live metadata + transport controls), real timer + call states, notification-
+> driven live activities, and a settings screen (cutout calibration, per-feature toggles) with
+> boot-restore. Remaining work is release signing, a real app icon, and Play Store listing assets
+> (see `docs/PLAY_STORE.md`).
 
 ## How it works
 
@@ -69,6 +70,7 @@ Kotlin · Jetpack Compose · `minSdk 26` / `targetSdk 35` · Coroutines `StateFl
 - [x] **Phase 0** — scaffold, permissions onboarding, foreground service
 - [x] **Phase 1** — core morphing pill + demo triggers
 - [x] **Phase 2** — Now Playing via `MediaSessionManager` (real media + transport controls)
-- [ ] **Phase 3** — timer + call states from real system sources
-- [ ] **Phase 4** — live activities driven by notifications (split layout)
-- [ ] **Phase 5** — settings (cutout calibration, toggles), boot-restart, Play Store prep
+- [x] **Phase 3** — timer + call states from real system sources
+- [x] **Phase 4** — live activities driven by notifications (split layout)
+- [x] **Phase 5** — settings (cutout calibration, toggles), boot-restart, Play Store prep
+  (`PRIVACY.md`, `docs/PLAY_STORE.md`)
