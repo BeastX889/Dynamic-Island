@@ -1,9 +1,14 @@
 package com.dynamicisland.app.overlay
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -21,11 +26,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -39,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynamicisland.app.island.CallPhase
 import com.dynamicisland.app.island.IslandState
+import com.dynamicisland.app.island.MusicAction
 import com.dynamicisland.app.island.Presentation
 import androidx.compose.foundation.Image as ComposeImage
 
@@ -64,6 +78,7 @@ fun IslandView(
     state: IslandState,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
+    onMusicAction: (MusicAction) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val geo = geometryFor(state.presentation)
@@ -97,7 +112,7 @@ fun IslandView(
             transitionSpec = { (fadeIn() togetherWith fadeOut()) },
             label = "island-content",
         ) { _ ->
-            IslandContent(state)
+            IslandContent(state, onMusicAction)
         }
     }
 }
@@ -113,10 +128,10 @@ private fun IslandState.contentKey(): String = when (this) {
 }
 
 @Composable
-private fun IslandContent(state: IslandState) {
+private fun IslandContent(state: IslandState, onMusicAction: (MusicAction) -> Unit) {
     when (state) {
         is IslandState.Idle, is IslandState.Hidden -> Unit
-        is IslandState.Music -> MusicContent(state)
+        is IslandState.Music -> MusicContent(state, onMusicAction)
         is IslandState.Call -> CallContent(state)
         is IslandState.Timer -> TimerContent(state)
         is IslandState.LiveActivity -> LiveActivityContent(state)
@@ -124,18 +139,18 @@ private fun IslandContent(state: IslandState) {
 }
 
 @Composable
-private fun MusicContent(state: IslandState.Music) {
+private fun MusicContent(state: IslandState.Music, onMusicAction: (MusicAction) -> Unit) {
     if (state.expanded) {
         Column(Modifier.fillMaxWidth().padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Artwork(state)
                 Spacer(Modifier.width(14.dp))
-                Column {
+                Column(Modifier.weight(1f)) {
                     PrimaryText(state.title)
                     SecondaryText(state.artist)
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
             val progress = if (state.durationMs > 0) {
                 (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f)
             } else 0f
@@ -145,6 +160,18 @@ private fun MusicContent(state: IslandState.Music) {
                 color = Color.White,
                 trackColor = Color(0x33FFFFFF),
             )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TransportButton(Icons.Filled.SkipPrevious) { onMusicAction(MusicAction.PREVIOUS) }
+                TransportButton(
+                    if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                ) { onMusicAction(MusicAction.PLAY_PAUSE) }
+                TransportButton(Icons.Filled.SkipNext) { onMusicAction(MusicAction.NEXT) }
+            }
         }
     } else {
         Row(
@@ -173,14 +200,33 @@ private fun Artwork(state: IslandState.Music, size: Dp = 56.dp) {
     }
 }
 
-/** Static three-bar glyph standing in for an animated equalizer (animation lands with Phase 2). */
+/** Three bars that bounce while playing, settling flat when paused. */
 @Composable
 private fun EqualizerBars(isPlaying: Boolean) {
     val color = if (isPlaying) Color(0xFF8AB4F8) else Color(0x66FFFFFF)
+    val transition = rememberInfiniteTransition(label = "eq")
+    val phases = listOf(0, 180, 90)
     Row(verticalAlignment = Alignment.Bottom) {
-        listOf(10.dp, 18.dp, 12.dp).forEach { h ->
-            Box(Modifier.padding(horizontal = 1.dp).width(3.dp).height(h).background(color))
+        phases.forEach { offsetMs ->
+            val h by transition.animateFloat(
+                initialValue = 6f,
+                targetValue = 20f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 500, delayMillis = offsetMs),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "bar",
+            )
+            val height = if (isPlaying) h.dp else 10.dp
+            Box(Modifier.padding(horizontal = 1.dp).width(3.dp).height(height).background(color))
         }
+    }
+}
+
+@Composable
+private fun TransportButton(icon: ImageVector, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(imageVector = icon, contentDescription = null, tint = Color.White)
     }
 }
 

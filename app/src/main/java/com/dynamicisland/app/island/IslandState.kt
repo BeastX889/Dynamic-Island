@@ -79,5 +79,8 @@ sealed interface IslandState {
 
 enum class CallPhase { INCOMING, ACTIVE, ENDED }
 
+/** Transport actions the user can trigger from the expanded music view. */
+enum class MusicAction { PLAY_PAUSE, NEXT, PREVIOUS }
+
 /** The coarse geometry the pill animates between. Actual dp values live in the UI layer. */
 enum class Presentation { HIDDEN, COMPACT, SPLIT, EXPANDED }

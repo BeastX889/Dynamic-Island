@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.LifecycleService
 import com.dynamicisland.app.MainActivity
 import com.dynamicisland.app.R
+import com.dynamicisland.app.feature.media.NowPlayingRepository
 import com.dynamicisland.app.island.IslandController
 import com.dynamicisland.app.overlay.ComposeOverlayHost
 import com.dynamicisland.app.overlay.IslandView
@@ -33,10 +34,12 @@ class IslandOverlayService : LifecycleService() {
 
     private lateinit var windowManager: WindowManager
     private var host: ComposeOverlayHost? = null
+    private lateinit var nowPlaying: NowPlayingRepository
 
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        nowPlaying = NowPlayingRepository(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -53,6 +56,10 @@ class IslandOverlayService : LifecycleService() {
         if (PermissionUtils.canDrawOverlays(this)) {
             addOverlayIfNeeded()
             IslandController.setEnabled(true)
+            // Start mirroring real media if notification access is granted.
+            if (PermissionUtils.isNotificationListenerEnabled(this)) {
+                nowPlaying.start()
+            }
         }
         return START_STICKY
     }
@@ -66,6 +73,7 @@ class IslandOverlayService : LifecycleService() {
                 state = state,
                 onTap = { IslandController.toggleExpanded() },
                 onLongPress = { IslandController.setExpanded(true) },
+                onMusicAction = { nowPlaying.onAction(it) },
             )
         }
         host = overlayHost
@@ -98,6 +106,7 @@ class IslandOverlayService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        nowPlaying.stop()
         IslandController.setEnabled(false)
         removeOverlay()
         super.onDestroy()

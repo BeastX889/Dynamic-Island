@@ -3,9 +3,10 @@
 An Android recreation of the iPhone **Dynamic Island** — a floating, morphing pill anchored to the
 phone's camera cutout that reacts to system events (now playing, calls, timers, live activities).
 
-> Status: **Phase 0–1 (foundation)** — project scaffold, permission onboarding, foreground overlay
-> service, and the core morphing-pill animation with demo triggers. Now Playing, call/timer wiring,
-> and live activities land in later phases (see the roadmap below).
+> Status: **Phase 0–2** — project scaffold, permission onboarding, foreground overlay service, the
+> core morphing-pill animation with demo triggers, and **real Now Playing** (live media metadata +
+> working transport controls via `MediaSessionManager`). Call/timer wiring and live activities land
+> in later phases (see the roadmap below).
 
 ## How it works
 
@@ -67,7 +68,7 @@ Kotlin · Jetpack Compose · `minSdk 26` / `targetSdk 35` · Coroutines `StateFl
 
 - [x] **Phase 0** — scaffold, permissions onboarding, foreground service
 - [x] **Phase 1** — core morphing pill + demo triggers
-- [ ] **Phase 2** — Now Playing via `MediaSessionManager` (real media + transport controls)
+- [x] **Phase 2** — Now Playing via `MediaSessionManager` (real media + transport controls)
 - [ ] **Phase 3** — timer + call states from real system sources
 - [ ] **Phase 4** — live activities driven by notifications (split layout)
 - [ ] **Phase 5** — settings (cutout calibration, toggles), boot-restart, Play Store prep
