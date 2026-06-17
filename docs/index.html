@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dynamic Island — Web Demo</title>
+<style>
+  :root {
+    --bg: #0a0a0c;
+    --pill: #000;
+    --accent: #8ab4f8;
+    --green: #34c759;
+    --orange: #ff9f0a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    padding: 32px 16px 56px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #e8e8ea;
+    background: radial-gradient(1200px 600px at 50% -10%, #15161c 0%, var(--bg) 60%);
+  }
+  h1 { font-size: 20px; font-weight: 700; margin: 4px 0 0; letter-spacing: .2px; }
+  .sub { font-size: 13px; color: #9a9aa2; margin: 0; text-align: center; max-width: 460px; line-height: 1.5; }
+
+  /* ---- Phone mockup ---- */
+  .phone {
+    position: relative;
+    width: 330px;
+    height: 680px;
+    border-radius: 52px;
+    padding: 12px;
+    background: linear-gradient(160deg, #2a2c34, #15161b);
+    box-shadow: 0 30px 70px rgba(0,0,0,.55), inset 0 0 0 2px rgba(255,255,255,.04);
+  }
+  .screen {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 42px;
+    overflow: hidden;
+    background:
+      radial-gradient(700px 380px at 20% 0%, #3a2d6b 0%, transparent 55%),
+      radial-gradient(700px 420px at 90% 20%, #2b6b6b 0%, transparent 55%),
+      linear-gradient(180deg, #1a1430 0%, #0c1020 60%, #060a14 100%);
+  }
+  .statusbar {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 26px 0; font-size: 13px; font-weight: 600; color: #fff; opacity: .9;
+  }
+  .statusbar .right { display: flex; gap: 6px; align-items: center; }
+
+  /* ---- The Island ---- */
+  .island {
+    position: absolute;
+    top: 14px; left: 50%;
+    transform: translateX(-50%);
+    width: 122px; height: 36px;
+    background: var(--pill);
+    border-radius: 20px;
+    color: #fff;
+    overflow: hidden;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5);
+    /* the morph: bouncy spring-like easing on size + radius */
+    transition:
+      width .55s cubic-bezier(.34,1.56,.64,1),
+      height .55s cubic-bezier(.34,1.56,.64,1),
+      border-radius .55s cubic-bezier(.34,1.56,.64,1);
+  }
+  .island-inner {
+    width: 100%; height: 100%;
+    display: flex; align-items: center;
+    padding: 0 10px;
+    animation: fadeIn .35s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
+  .row { display: flex; align-items: center; width: 100%; }
+  .between { justify-content: space-between; }
+  .grow { flex: 1; min-width: 0; }
+  .title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .subtle { font-size: 12px; color: rgba(255,255,255,.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .big { font-size: 28px; font-weight: 700; }
+
+  .art { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, #8ab4f8, #c58af9); flex: none; }
+  .art.lg { width: 52px; height: 52px; border-radius: 10px; }
+  .dot { width: 20px; height: 20px; border-radius: 50%; flex: none; }
+  .dot.green { background: var(--green); }
+  .dot.orange { background: var(--orange); }
+
+  /* equalizer */
+  .eq { display: flex; align-items: flex-end; gap: 3px; height: 20px; }
+  .eq i { width: 3px; height: 8px; background: var(--accent); border-radius: 2px; display: block; }
+  .island.playing .eq i { animation: bounce .6s ease-in-out infinite; }
+  .eq i:nth-child(2) { animation-delay: .2s; }
+  .eq i:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce { 0%,100% { height: 6px } 50% { height: 20px } }
+
+  /* expanded layout */
+  .col { display: flex; flex-direction: column; width: 100%; padding: 16px 18px; gap: 12px; }
+  .progress { height: 6px; border-radius: 3px; background: rgba(255,255,255,.2); overflow: hidden; }
+  .progress > span { display: block; height: 100%; width: 0%; background: #fff; border-radius: 3px; transition: width .5s linear; }
+  .controls { display: flex; justify-content: space-evenly; align-items: center; }
+  .controls button {
+    background: none; border: 0; color: #fff; font-size: 22px; cursor: pointer; padding: 6px 10px; border-radius: 10px;
+  }
+  .controls button:active { background: rgba(255,255,255,.12); }
+  .emoji { font-size: 18px; line-height: 1; flex: none; }
+  .emoji.lg { font-size: 26px; }
+
+  .hint { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center; font-size: 12px; color: rgba(255,255,255,.4); }
+
+  /* ---- Controls ---- */
+  .panel { width: 330px; max-width: 100%; }
+  .label { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: #7d7d86; margin: 4px 2px 8px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btns button {
+    flex: 1 1 auto; min-width: 92px;
+    padding: 11px 10px; border-radius: 12px; cursor: pointer;
+    background: #17181f; color: #e8e8ea; border: 1px solid #2a2b34; font-size: 14px; font-weight: 600;
+    transition: background .15s, border-color .15s;
+  }
+  .btns button:hover { background: #1f212b; }
+  .btns button.active { border-color: var(--accent); color: var(--accent); }
+  .foot { font-size: 12px; color: #6c6c75; text-align: center; max-width: 460px; line-height: 1.5; }
+  .foot a { color: var(--accent); }
+</style>
+</head>
+<body>
+  <h1>Dynamic Island</h1>
+  <p class="sub">A browser preview of the Android app's interface — tap the pill to expand, and use the buttons to switch states. (Real music / calls work in the Android app, not in a browser.)</p>
+
+  <div class="phone">
+    <div class="screen">
+      <div class="statusbar">
+        <span id="clock">9:41</span>
+        <span class="right">5G&nbsp;&nbsp;100%&nbsp;▮</span>
+      </div>
+
+      <div id="island" class="island" role="button" aria-label="Dynamic Island">
+        <div class="island-inner" id="islandInner"></div>
+      </div>
+
+      <div class="hint">Tap the island to expand ↑</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="label">States</div>
+    <div class="btns" id="stateBtns">
+      <button data-state="music">🎵 Music</button>
+      <button data-state="call">📞 Call</button>
+      <button data-state="timer">⏱ Timer</button>
+      <button data-state="live">📦 Live</button>
+      <button data-state="idle">Clear</button>
+    </div>
+  </div>
+
+  <p class="foot">This is a visual demo of the UI. The full app (overlay over other apps, real Now Playing, calls, live activities) is the native Android build —
+    see the <a href="https://github.com/BeastX889/Dynamic-Island" target="_blank" rel="noopener">repository</a>.</p>
+
+<script>
+(function () {
+  const island = document.getElementById('island');
+  const inner = document.getElementById('islandInner');
+  const btns = [...document.querySelectorAll('#stateBtns button')];
+
+  // ---- geometry per presentation (mirrors the Android IslandView) ----
+  const GEO = {
+    idle:     { w: 122, h: 36,  r: 20 },
+    compact:  { w: 150, h: 36,  r: 20 },
+    split:    { w: 240, h: 36,  r: 20 },
+    expanded: { w: 300, h: 158, r: 36 },
+  };
+
+  // ---- demo state ----
+  let state = { type: 'idle', expanded: false };
+  let music = { title: 'Midnight City', artist: 'M83', playing: true, pos: 62, dur: 244 };
+  let timer = { remaining: 305, total: 600 };
+  const live = { emoji: '📦', title: 'Pizza Palace', status: 'Out for delivery', progress: .72, trailing: '12 min' };
+
+  function presentation() {
+    if (state.type === 'idle') return 'idle';
+    if (state.expanded) return 'expanded';
+    if (state.type === 'live') return 'split';
+    return 'compact';
+  }
+
+  function fmt(t) {
+    t = Math.max(0, Math.floor(t));
+    const m = Math.floor(t / 60), s = t % 60;
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  function content() {
+    switch (state.type) {
+      case 'music':
+        if (state.expanded) return `
+          <div class="col">
+            <div class="row">
+              <div class="art lg"></div>
+              <div class="grow" style="margin-left:14px">
+                <div class="title">${music.title}</div>
+                <div class="subtle">${music.artist}</div>
+              </div>
+            </div>
+            <div class="progress"><span style="width:${(music.pos/music.dur*100)}%"></span></div>
+            <div class="controls">
+              <button data-act="prev">⏮</button>
+              <button data-act="playpause">${music.playing ? '⏸' : '▶'}</button>
+              <button data-act="next">⏭</button>
+            </div>
+          </div>`;
+        return `<div class="row between">
+            <div class="art"></div>
+            <div class="eq"><i></i><i></i><i></i></div>
+          </div>`;
+      case 'call':
+        if (state.expanded) return `
+          <div class="col">
+            <div class="title">Incoming call</div>
+            <div class="subtle">Mobile</div>
+            <div class="controls">
+              <button data-act="end" style="color:#ff453a">⛔</button>
+              <button data-act="answer" style="color:#34c759">📞</button>
+            </div>
+          </div>`;
+        return `<div class="row between"><div class="dot green"></div><div class="subtle">Incoming call</div></div>`;
+      case 'timer':
+        if (state.expanded) return `
+          <div class="col">
+            <div class="subtle">Timer</div>
+            <div class="big">${fmt(timer.remaining)}</div>
+          </div>`;
+        return `<div class="row between"><div class="dot orange"></div><div class="title">${fmt(timer.remaining)}</div></div>`;
+      case 'live':
+        if (state.expanded) return `
+          <div class="col">
+            <div class="row">
+              <span class="emoji lg">${live.emoji}</span>
+              <div class="grow" style="margin-left:12px">
+                <div class="title">${live.title}</div>
+                <div class="subtle">${live.status}</div>
+              </div>
+            </div>
+            <div class="progress"><span style="width:${live.progress*100}%"></span></div>
+          </div>`;
+        return `<div class="row between"><span class="emoji">${live.emoji}</span><div class="subtle">${live.trailing}</div></div>`;
+      default:
+        return '';
+    }
+  }
+
+  function render() {
+    const g = GEO[presentation()];
+    island.style.width = g.w + 'px';
+    island.style.height = g.h + 'px';
+    island.style.borderRadius = g.r + 'px';
+    island.classList.toggle('playing', state.type === 'music' && music.playing && !state.expanded);
+    inner.innerHTML = content();
+    inner.style.animation = 'none';
+    // restart fade
+    void inner.offsetWidth;
+    inner.style.animation = '';
+    bindInner();
+  }
+
+  function bindInner() {
+    inner.querySelectorAll('[data-act]').forEach(b => {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const act = b.dataset.act;
+        if (act === 'playpause') music.playing = !music.playing;
+        else if (act === 'next') { music.pos = 0; }
+        else if (act === 'prev') { music.pos = 0; }
+        else if (act === 'end' || act === 'answer') setState('idle');
+        render();
+      });
+    });
+  }
+
+  function setState(type) {
+    state = { type, expanded: false };
+    if (type === 'timer') timer.remaining = timer.total ? 305 : 305;
+    btns.forEach(b => b.classList.toggle('active', b.dataset.state === type));
+    render();
+  }
+
+  island.addEventListener('click', () => {
+    if (state.type === 'idle') return;
+    state.expanded = !state.expanded;
+    render();
+  });
+
+  btns.forEach(b => b.addEventListener('click', () => setState(b.dataset.state)));
+
+  // ---- ticking: music progress + timer countdown ----
+  setInterval(() => {
+    let dirty = false;
+    if (state.type === 'music' && music.playing) {
+      music.pos = (music.pos + 1) % music.dur;
+      dirty = true;
+    }
+    if (state.type === 'timer') {
+      timer.remaining -= 1;
+      if (timer.remaining <= 0) { setState('idle'); return; }
+      dirty = true;
+    }
+    if (dirty) render();
+  }, 1000);
+
+  // live clock in the status bar
+  function tickClock() {
+    const d = new Date();
+    document.getElementById('clock').textContent =
+      d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  tickClock(); setInterval(tickClock, 10000);
+
+  // start on music so there's something to see
+  setState('music');
+})();
+</script>
+</body>
+</html>

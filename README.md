@@ -3,6 +3,10 @@
 An Android recreation of the iPhone **Dynamic Island** — a floating, morphing pill anchored to the
 phone's camera cutout that reacts to system events (now playing, calls, timers, live activities).
 
+> **Web demo:** a browser preview of the UI lives in [`docs/index.html`](docs/index.html) and is
+> deployed to GitHub Pages (see the Pages link in the repo's Environments / Actions). It shows the
+> morph + states; real media/calls only work in the native Android app.
+
 > Status: **Phase 0–5 — feature-complete for v1.** Morphing overlay pill, permission onboarding,
 > real Now Playing (live metadata + transport controls), real timer + call states, notification-
 > driven live activities, and a settings screen (cutout calibration, per-feature toggles) with
