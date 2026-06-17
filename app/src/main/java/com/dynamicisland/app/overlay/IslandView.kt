@@ -1,16 +1,20 @@
 package com.dynamicisland.app.overlay
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -37,13 +41,17 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,8 +75,15 @@ private fun geometryFor(presentation: Presentation): Geometry = when (presentati
 }
 
 /**
- * The morphing pill. Animates its size and corner radius with spring physics as [state] changes,
- * and cross-fades its contents via [AnimatedContent]. Tap toggles the expanded view.
+ * The morphing pill. Animates its size and corner radius as [state] changes, and morphs its
+ * contents via [AnimatedContent]. Tap toggles the expanded view.
+ *
+ * Motion design (tuned to feel smoother than the iOS Dynamic Island):
+ * - the container size + corner ride one cohesive, lightly-damped spring (a gentle settle with a
+ *   hint of overshoot, no jittery wobble);
+ * - content swaps fade **and** scale in/out, with a spring [SizeTransform] so the box reshapes
+ *   fluidly around the new content instead of snapping;
+ * - touch gives a subtle rubber-band press scale.
  *
  * The composable draws nothing for [IslandState.Hidden]; callers can keep it mounted and simply
  * flip the state to hide/show without tearing down the overlay.
@@ -82,26 +97,40 @@ fun IslandView(
     scale: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
+    if (state is IslandState.Hidden) return
+
     val geo = geometryFor(state.presentation)
 
-    val springSpec = spring<Dp>(
-        dampingRatio = Spring.DampingRatioMediumBouncy,
-        stiffness = Spring.StiffnessMediumLow,
-    )
-    val width by animateDpAsState(geo.width * scale, springSpec, label = "width")
-    val height by animateDpAsState(geo.height * scale, springSpec, label = "height")
-    val corner by animateDpAsState(geo.corner * scale, springSpec, label = "corner")
+    // One cohesive spring for the whole morph: lively but well-damped so it settles cleanly with
+    // only a whisper of overshoot — reads as smoother than the stock bouncy spring.
+    val sizeSpring = spring<Dp>(dampingRatio = 0.82f, stiffness = 380f)
+    val width by animateDpAsState(geo.width * scale, sizeSpring, label = "width")
+    val height by animateDpAsState(geo.height * scale, sizeSpring, label = "height")
+    val corner by animateDpAsState(geo.corner * scale, sizeSpring, label = "corner")
 
-    if (state is IslandState.Hidden) return
+    // Tactile press feedback — dips on touch, springs back on release.
+    val pressScale = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
 
     Box(
         modifier = modifier
+            .graphicsLayer {
+                scaleX = pressScale.value
+                scaleY = pressScale.value
+            }
             .width(width)
             .height(height)
             .clip(RoundedCornerShape(corner))
             .background(Color.Black)
             .pointerInput(Unit) {
                 detectTapGestures(
+                    onPress = {
+                        scope.launch { pressScale.animateTo(0.95f, tween(90, easing = FastOutSlowInEasing)) }
+                        tryAwaitRelease()
+                        scope.launch {
+                            pressScale.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 600f))
+                        }
+                    },
                     onTap = { onTap() },
                     onLongPress = { onLongPress() },
                 )
@@ -110,7 +139,15 @@ fun IslandView(
     ) {
         AnimatedContent(
             targetState = state.contentKey(),
-            transitionSpec = { (fadeIn() togetherWith fadeOut()) },
+            transitionSpec = {
+                val enter = fadeIn(tween(220, delayMillis = 40)) +
+                    scaleIn(initialScale = 0.9f, animationSpec = tween(220, delayMillis = 40))
+                val exit = fadeOut(tween(120)) +
+                    scaleOut(targetScale = 0.95f, animationSpec = tween(120))
+                enter.togetherWith(exit).using(
+                    SizeTransform(clip = false) { _, _ -> spring(dampingRatio = 0.82f, stiffness = 380f) },
+                )
+            },
             label = "island-content",
         ) { _ ->
             IslandContent(state, onMusicAction)

@@ -11,6 +11,13 @@
     --accent: #8ab4f8;
     --green: #34c759;
     --orange: #ff9f0a;
+    /* a damped-spring easing (gentle overshoot to ~1.11, then settle) — smoother than a bezier */
+    --spring: linear(
+      0, 0.006, 0.025, 0.054, 0.094, 0.143, 0.2, 0.265, 0.336, 0.413, 0.493,
+      0.576, 0.659, 0.741, 0.819, 0.892, 0.957, 1.012, 1.056, 1.088, 1.107,
+      1.114, 1.111, 1.099, 1.082, 1.062, 1.042, 1.024, 1.009, 0.999, 0.992,
+      0.989, 0.989, 0.991, 0.994, 0.997, 1
+    );
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -69,19 +76,26 @@
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 6px 20px rgba(0,0,0,.5);
-    /* the morph: bouncy spring-like easing on size + radius */
+    /* the morph: one cohesive spring easing across size + radius */
     transition:
-      width .55s cubic-bezier(.34,1.56,.64,1),
-      height .55s cubic-bezier(.34,1.56,.64,1),
-      border-radius .55s cubic-bezier(.34,1.56,.64,1);
+      width .6s var(--spring),
+      height .6s var(--spring),
+      border-radius .6s var(--spring),
+      transform .14s ease;
+    will-change: width, height;
   }
+  /* tactile press feedback */
+  .island:active { transform: translateX(-50%) scale(.96); }
   .island-inner {
     width: 100%; height: 100%;
     display: flex; align-items: center;
     padding: 0 10px;
-    animation: fadeIn .35s ease;
+    animation: pop .42s var(--spring);
   }
-  @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes pop {
+    from { opacity: 0; transform: scale(.9); }
+    to   { opacity: 1; transform: scale(1); }
+  }
 
   .row { display: flex; align-items: center; width: 100%; }
   .between { justify-content: space-between; }
