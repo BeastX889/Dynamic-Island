@@ -19,6 +19,7 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.dynamicisland.app.MainActivity
 import com.dynamicisland.app.R
+import com.dynamicisland.app.data.IslandSettings
 import com.dynamicisland.app.data.SettingsRepository
 import com.dynamicisland.app.feature.FeatureFlags
 import com.dynamicisland.app.feature.call.CallStateMonitor
@@ -26,9 +27,12 @@ import com.dynamicisland.app.feature.media.NowPlayingRepository
 import com.dynamicisland.app.island.IslandController
 import com.dynamicisland.app.overlay.ComposeOverlayHost
 import com.dynamicisland.app.overlay.IslandView
+import com.dynamicisland.app.util.CutoutInfo
+import com.dynamicisland.app.util.CutoutUtils
 import com.dynamicisland.app.util.PermissionUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 /**
  * Foreground service that owns the floating island window.
@@ -47,6 +51,10 @@ class IslandOverlayService : LifecycleService() {
     private lateinit var settings: SettingsRepository
     private val scaleState = mutableFloatStateOf(1f)
 
+    private var currentSettings = IslandSettings()
+    // Detected camera-cutout position (null until measured / no cutout on device).
+    private var cutout: CutoutInfo? = null
+
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -60,21 +68,36 @@ class IslandOverlayService : LifecycleService() {
     private fun observeSettings() {
         lifecycleScope.launch {
             settings.flow.collect { s ->
+                currentSettings = s
                 FeatureFlags.media = s.mediaEnabled
                 FeatureFlags.call = s.callEnabled
                 FeatureFlags.timer = s.timerEnabled
                 FeatureFlags.liveActivity = s.liveActivityEnabled
                 scaleState.floatValue = s.scalePercent / 100f
-                applyLayout(s.verticalOffsetDp, s.horizontalOffsetDp)
+                applyLayout()
             }
         }
     }
 
-    private fun applyLayout(verticalOffsetDp: Int, horizontalOffsetDp: Int) {
-        val density = resources.displayMetrics.density
+    /**
+     * Positions the window. When auto-align is on and a cutout was detected, the pill is centred
+     * over the real camera hole (works for corner + off-centre punch-holes, not just centred
+     * notches); the manual sliders then fine-tune on top. Otherwise the manual offsets are absolute.
+     */
+    private fun applyLayout() {
         val p = params ?: return
-        p.x = (horizontalOffsetDp * density).toInt()
-        p.y = (verticalOffsetDp * density).toInt()
+        val density = resources.displayMetrics.density
+        val manualX = (currentSettings.horizontalOffsetDp * density).toInt()
+        val manualY = (currentSettings.verticalOffsetDp * density).toInt()
+
+        val c = cutout
+        if (currentSettings.autoAlign && c != null) {
+            p.x = c.centerXOffsetPx + manualX
+            p.y = c.topPx + manualY
+        } else {
+            p.x = manualX
+            p.y = manualY
+        }
         host?.let { runCatching { windowManager.updateViewLayout(it.composeView, p) } }
     }
 
@@ -82,27 +105,40 @@ class IslandOverlayService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
 
         if (intent?.action == ACTION_STOP) {
-            runBlocking { settings.setWasRunning(false) }
+            persistRunning(false)
             stopSelf()
             return START_NOT_STICKY
         }
 
+        // startForegroundService requires a startForeground() call within a few seconds, so we
+        // foreground first and then decide.
         startInForeground()
 
-        // Bail out (without the overlay) if the permission was revoked while we were away.
-        if (PermissionUtils.canDrawOverlays(this)) {
-            addOverlayIfNeeded()
-            IslandController.setEnabled(true)
-            isRunning = true
-            lifecycleScope.launch { settings.setWasRunning(true) }
-            // (Re)attach the real feature monitors with whatever permissions are now granted.
-            // Both calls are idempotent, so refreshing after a permission grant is safe.
-            if (PermissionUtils.isNotificationListenerEnabled(this)) {
-                nowPlaying.start()
-            }
-            callMonitor.start()
+        // If the overlay permission was revoked while we were away, don't leave a phantom "active"
+        // notification with nothing on screen — clear the running flag and shut down cleanly.
+        if (!PermissionUtils.canDrawOverlays(this)) {
+            persistRunning(false)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
         }
+
+        addOverlayIfNeeded()
+        IslandController.setEnabled(true)
+        isRunning = true
+        persistRunning(true)
+        // (Re)attach the real feature monitors with whatever permissions are now granted.
+        // Both calls are idempotent, so refreshing after a permission grant is safe.
+        if (PermissionUtils.isNotificationListenerEnabled(this)) {
+            nowPlaying.start()
+        }
+        callMonitor.start()
         return START_STICKY
+    }
+
+    /** Persist the boot-restore flag off the main thread (DataStore does disk I/O). */
+    private fun persistRunning(value: Boolean) {
+        CoroutineScope(Dispatchers.IO).launch { settings.setWasRunning(value) }
     }
 
     private fun addOverlayIfNeeded() {
@@ -130,10 +166,26 @@ class IslandOverlayService : LifecycleService() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            // Position is refined by the settings (vertical/horizontal calibration) via applyLayout.
+            // Let the window extend into the cutout region so it can sit over the camera hole.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                    } else {
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                    }
+            }
+            // Refined by applyLayout() once the cutout is measured + settings applied.
             y = 0
         }
         params = layoutParams
+
+        // Re-measure the cutout whenever insets change (attach, rotation) and re-position.
+        overlayHost.composeView.setOnApplyWindowInsetsListener { v, insets ->
+            cutout = CutoutUtils.detect(windowManager, v)
+            applyLayout()
+            insets
+        }
 
         windowManager.addView(overlayHost.composeView, layoutParams)
         overlayHost.onAttached()

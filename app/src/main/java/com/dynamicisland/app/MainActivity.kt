@@ -264,10 +264,12 @@ private fun HomeScreen() {
             Spacer(Modifier.height(8.dp))
             Eyebrow("Settings")
             GroupCard {
-                LabeledSlider("Vertical position", settings.verticalOffsetDp.toFloat(), 0f..120f,
+                SwitchRow("Auto-align to cutout", settings.autoAlign) { scope.launch { settingsRepo.setAutoAlign(it) } }
+                InsetDivider()
+                LabeledSlider("Vertical nudge", settings.verticalOffsetDp.toFloat(), 0f..120f,
                     format = { "${it.toInt()}" }) { v -> scope.launch { settingsRepo.setVerticalOffset(v.toInt()) } }
                 InsetDivider()
-                LabeledSlider("Horizontal position", settings.horizontalOffsetDp.toFloat(), -80f..80f,
+                LabeledSlider("Horizontal nudge", settings.horizontalOffsetDp.toFloat(), -80f..80f,
                     format = { val n = it.toInt(); if (n > 0) "+$n" else "$n" }) { v -> scope.launch { settingsRepo.setHorizontalOffset(v.toInt()) } }
                 InsetDivider()
                 LabeledSlider("Size", settings.scalePercent.toFloat(), 70f..130f,

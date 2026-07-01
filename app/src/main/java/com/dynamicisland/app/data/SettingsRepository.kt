@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.map
 
 /** User-tunable island settings, persisted with DataStore. */
 data class IslandSettings(
+    val autoAlign: Boolean = true,
     val verticalOffsetDp: Int = 8,
     val horizontalOffsetDp: Int = 0,
     val scalePercent: Int = 100,
@@ -31,6 +32,7 @@ class SettingsRepository(private val context: Context) {
 
     val flow: Flow<IslandSettings> = context.dataStore.data.map { p ->
         IslandSettings(
+            autoAlign = p[AUTO_ALIGN] ?: true,
             verticalOffsetDp = p[VERTICAL_OFFSET] ?: 8,
             horizontalOffsetDp = p[HORIZONTAL_OFFSET] ?: 0,
             scalePercent = p[SCALE_PERCENT] ?: 100,
@@ -42,6 +44,7 @@ class SettingsRepository(private val context: Context) {
         )
     }
 
+    suspend fun setAutoAlign(value: Boolean) = edit { it[AUTO_ALIGN] = value }
     suspend fun setVerticalOffset(dp: Int) = edit { it[VERTICAL_OFFSET] = dp }
     suspend fun setHorizontalOffset(dp: Int) = edit { it[HORIZONTAL_OFFSET] = dp }
     suspend fun setScalePercent(percent: Int) = edit { it[SCALE_PERCENT] = percent }
@@ -56,6 +59,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     private companion object {
+        val AUTO_ALIGN = booleanPreferencesKey("auto_align")
         val VERTICAL_OFFSET = intPreferencesKey("vertical_offset_dp")
         val HORIZONTAL_OFFSET = intPreferencesKey("horizontal_offset_dp")
         val SCALE_PERCENT = intPreferencesKey("scale_percent")
