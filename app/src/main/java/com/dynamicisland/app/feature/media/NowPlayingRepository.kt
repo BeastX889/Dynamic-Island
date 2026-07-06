@@ -48,10 +48,19 @@ class NowPlayingRepository(private val context: Context) {
         override fun onSessionDestroyed() = clear()
     }
 
-    /** Advances the progress bar smoothly while playing (PlaybackState.position is a snapshot). */
+    /**
+     * Advances the progress bar while playing (PlaybackState.position is a snapshot). The progress
+     * bar is only visible in the expanded player, so when the pill is collapsed the tick is a no-op
+     * reschedule — no state re-emission, no Compose recomposition, no per-second battery churn.
+     */
     private val ticker = object : Runnable {
         override fun run() {
-            publish()
+            val expanded = (IslandController.state.value as? IslandState.Music)?.expanded == true
+            if (expanded) {
+                publish()
+            } else if (activeController?.playbackState?.state == PlaybackState.STATE_PLAYING) {
+                handler.postDelayed(this, 1000L)
+            }
         }
     }
 

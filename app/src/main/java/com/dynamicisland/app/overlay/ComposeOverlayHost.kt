@@ -51,6 +51,23 @@ class ComposeOverlayHost(
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
     }
 
+    /**
+     * Drop to STARTED while the screen is off: Compose animation clocks stop, so infinite
+     * animations (equalizer, springs mid-flight) cost nothing with the display dark.
+     */
+    fun onScreenOff() {
+        if (lifecycleRegistry.currentState == Lifecycle.State.RESUMED) {
+            lifecycleRegistry.currentState = Lifecycle.State.STARTED
+        }
+    }
+
+    /** Back to RESUMED when the screen turns on. */
+    fun onScreenOn() {
+        if (lifecycleRegistry.currentState == Lifecycle.State.STARTED) {
+            lifecycleRegistry.currentState = Lifecycle.State.RESUMED
+        }
+    }
+
     /** Tear down. Call before removing the view from the window manager. */
     fun onDetached() {
         lifecycleRegistry.currentState = Lifecycle.State.DESTROYED

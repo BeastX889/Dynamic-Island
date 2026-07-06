@@ -13,13 +13,24 @@ import com.dynamicisland.app.island.IslandState
  *     [com.dynamicisland.app.feature.media.NowPlayingRepository] read active media sessions without
  *     the restricted MEDIA_CONTENT_CONTROL permission.
  *  2. Ongoing *progress* notifications (food delivery, rides, downloads, navigation) are mapped to
- *     a live activity on the island — this is the closest real Android analogue to iOS Live
- *     Activities.
+ *     a live activity on the island — the closest real Android analogue to iOS Live Activities.
+ *
+ * Multiple concurrent candidates are held in a keyed map and ranked by category priority
+ * (call > navigation > transport > progress > other), then recency — not last-writer-wins — so a
+ * background download can't hijack the island from turn-by-turn navigation, and removing one
+ * candidate falls back to the next instead of blanking the pill.
  */
 class IslandNotificationListener : NotificationListenerService() {
 
-    /** The notification key currently driving the live activity, so we can clear it on removal. */
-    private var liveKey: String? = null
+    private data class Candidate(
+        val key: String,
+        val priority: Int,
+        val postTime: Long,
+        val state: IslandState.LiveActivity,
+    )
+
+    /** All currently-eligible live-activity notifications, keyed by notification key. */
+    private val candidates = LinkedHashMap<String, Candidate>()
 
     override fun onListenerConnected() {
         super.onListenerConnected()
@@ -31,32 +42,64 @@ class IslandNotificationListener : NotificationListenerService() {
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         isConnected = false
+        synchronized(candidates) { candidates.clear() }
+        IslandController.submit(IslandController.Source.LIVE_ACTIVITY, null)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
-        if (!FeatureFlags.liveActivity) return
         if (sbn.packageName == packageName) return
 
-        val activity = sbn.toLiveActivity() ?: return
-        liveKey = sbn.key
-        IslandController.submit(IslandController.Source.LIVE_ACTIVITY, activity)
+        val activity = if (FeatureFlags.liveActivity) sbn.toLiveActivity() else null
+        synchronized(candidates) {
+            if (activity != null) {
+                candidates[sbn.key] = Candidate(
+                    key = sbn.key,
+                    priority = priorityFor(sbn.notification?.category),
+                    postTime = sbn.postTime,
+                    state = activity,
+                )
+            } else {
+                candidates.remove(sbn.key)
+            }
+        }
+        publishBest()
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        if (sbn != null && sbn.key == liveKey) {
-            liveKey = null
-            IslandController.submit(IslandController.Source.LIVE_ACTIVITY, null)
+        sbn ?: return
+        val removed = synchronized(candidates) { candidates.remove(sbn.key) != null }
+        if (removed) publishBest()
+    }
+
+    /** Highest priority wins; ties go to the most recently posted. */
+    private fun publishBest() {
+        val best = synchronized(candidates) {
+            candidates.values.maxWithOrNull(compareBy({ it.priority }, { it.postTime }))
         }
+        IslandController.submit(IslandController.Source.LIVE_ACTIVITY, best?.state)
+    }
+
+    private fun priorityFor(category: String?): Int = when (category) {
+        Notification.CATEGORY_CALL -> 40
+        Notification.CATEGORY_NAVIGATION -> 30
+        Notification.CATEGORY_TRANSPORT -> 20
+        Notification.CATEGORY_PROGRESS -> 10
+        else -> 0
     }
 
     /**
      * Recognises a notification as a live activity when it is ongoing and carries determinate
-     * progress, or is explicitly categorised as progress/call/navigation. Returns null otherwise.
+     * progress, or is explicitly categorised as progress/call/navigation. Media notifications are
+     * excluded — they are already rendered richer through the MediaSession pipeline, and showing
+     * them here would double-report the same song.
      */
     private fun StatusBarNotification.toLiveActivity(): IslandState.LiveActivity? {
         val n = notification ?: return null
         val extras = n.extras ?: return null
+
+        // Media-style notifications ride the Now Playing pipeline instead.
+        if (extras.containsKey(Notification.EXTRA_MEDIA_SESSION)) return null
 
         val max = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
         val current = extras.getInt(Notification.EXTRA_PROGRESS, 0)

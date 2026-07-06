@@ -4,13 +4,17 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,6 +59,16 @@ class IslandOverlayService : LifecycleService() {
     // Detected camera-cutout position (null until measured / no cutout on device).
     private var cutout: CutoutInfo? = null
 
+    /** Freeze Compose while the display is dark so nothing animates against a black screen. */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> host?.onScreenOff()
+                Intent.ACTION_SCREEN_ON -> host?.onScreenOn()
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -62,6 +76,24 @@ class IslandOverlayService : LifecycleService() {
         callMonitor = CallStateMonitor(this)
         settings = SettingsRepository(this)
         observeSettings()
+        registerReceiver(
+            screenReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+            },
+        )
+    }
+
+    /**
+     * The cutout physically moves to a side edge in landscape, so a top-centre pill would strand
+     * itself mid-bezel. Hide it in landscape; on return to portrait the insets listener re-measures
+     * the cutout and re-anchors.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        host?.composeView?.visibility =
+            if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) View.GONE else View.VISIBLE
     }
 
     /** Mirror persisted settings into feature flags, the pill scale, and the window position. */
@@ -201,6 +233,7 @@ class IslandOverlayService : LifecycleService() {
 
     override fun onDestroy() {
         isRunning = false
+        runCatching { unregisterReceiver(screenReceiver) }
         nowPlaying.stop()
         callMonitor.stop()
         IslandController.setEnabled(false)

@@ -16,7 +16,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,9 +50,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -101,10 +106,14 @@ fun IslandView(
 
     val geo = geometryFor(state.presentation)
 
+    // Never let the pill overflow narrow screens (many phones are <=360dp wide; scale can reach 1.3).
+    val maxWidth = (LocalConfiguration.current.screenWidthDp - 24).dp
+    val targetWidth = (geo.width * scale).coerceAtMost(maxWidth)
+
     // One cohesive spring for the whole morph: lively but well-damped so it settles cleanly with
     // only a whisper of overshoot — reads as smoother than the stock bouncy spring.
     val sizeSpring = spring<Dp>(dampingRatio = 0.82f, stiffness = 380f)
-    val width by animateDpAsState(geo.width * scale, sizeSpring, label = "width")
+    val width by animateDpAsState(targetWidth, sizeSpring, label = "width")
     val height by animateDpAsState(geo.height * scale, sizeSpring, label = "height")
     val corner by animateDpAsState(geo.corner * scale, sizeSpring, label = "corner")
 
@@ -122,6 +131,19 @@ fun IslandView(
             .height(height)
             .clip(RoundedCornerShape(corner))
             .background(Color.Black)
+            // A hairline edge + faint top light-catch make the pill read as a physical piece of
+            // glass instead of a flat black rectangle — visible against dark wallpapers too.
+            .border(BorderStroke(1.dp, Color(0x1AFFFFFF)), RoundedCornerShape(corner))
+            .drawWithCache {
+                val sheen = Brush.verticalGradient(
+                    colors = listOf(Color(0x14FFFFFF), Color.Transparent),
+                    endY = size.height * 0.45f,
+                )
+                onDrawWithContent {
+                    drawContent()
+                    drawRect(sheen)
+                }
+            }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
@@ -238,25 +260,34 @@ private fun Artwork(state: IslandState.Music, size: Dp = 56.dp) {
     }
 }
 
-/** Three bars that bounce while playing, settling flat when paused. */
+/**
+ * Three bars that bounce while playing, settling flat when paused. The infinite transition only
+ * exists while playing — when paused (or the state leaves the composition) no animation clock runs,
+ * so the collapsed pill costs zero frames at rest.
+ */
 @Composable
 private fun EqualizerBars(isPlaying: Boolean) {
     val color = if (isPlaying) Color(0xFF8AB4F8) else Color(0x66FFFFFF)
-    val transition = rememberInfiniteTransition(label = "eq")
     val phases = listOf(0, 180, 90)
     Row(verticalAlignment = Alignment.Bottom) {
-        phases.forEach { offsetMs ->
-            val h by transition.animateFloat(
-                initialValue = 6f,
-                targetValue = 20f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 500, delayMillis = offsetMs),
-                    repeatMode = RepeatMode.Reverse,
-                ),
-                label = "bar",
-            )
-            val height = if (isPlaying) h.dp else 10.dp
-            Box(Modifier.padding(horizontal = 1.dp).width(3.dp).height(height).background(color))
+        if (isPlaying) {
+            val transition = rememberInfiniteTransition(label = "eq")
+            phases.forEach { offsetMs ->
+                val h by transition.animateFloat(
+                    initialValue = 6f,
+                    targetValue = 20f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 500, delayMillis = offsetMs),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                    label = "bar",
+                )
+                Box(Modifier.padding(horizontal = 1.dp).width(3.dp).height(h.dp).background(color))
+            }
+        } else {
+            phases.forEach { _ ->
+                Box(Modifier.padding(horizontal = 1.dp).width(3.dp).height(10.dp).background(color))
+            }
         }
     }
 }

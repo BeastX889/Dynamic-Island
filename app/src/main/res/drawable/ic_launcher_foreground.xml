@@ -4,8 +4,22 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- A simple white "island" pill centered in the safe zone -->
+    <!-- the island pill, centred in the adaptive-icon safe zone -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M36,46 m0,8 a8,8 0 0,1 8,-8 h20 a8,8 0 0,1 8,8 v0 a8,8 0 0,1 -8,8 h-20 a8,8 0 0,1 -8,-8 z" />
+        android:fillColor="#F2F2F4"
+        android:pathData="M39,47 h30 a7,7 0 0 1 7,7 a7,7 0 0 1 -7,7 h-30 a7,7 0 0 1 -7,-7 a7,7 0 0 1 7,-7 z" />
+    <!-- camera dot -->
+    <path
+        android:fillColor="#0E0E10"
+        android:pathData="M66,54 m-3.2,0 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0" />
+    <!-- accent tick (equalizer nod) -->
+    <path
+        android:fillColor="#5E9EFF"
+        android:pathData="M42,51 h3 v6 h-3 z" />
+    <path
+        android:fillColor="#5E9EFF"
+        android:pathData="M47,49 h3 v10 h-3 z" />
+    <path
+        android:fillColor="#5E9EFF"
+        android:pathData="M52,52 h3 v4 h-3 z" />
 </vector>
